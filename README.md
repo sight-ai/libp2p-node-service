@@ -2,6 +2,8 @@
 ## install dependencies
 ```
 go mod tidy
+
+cp .env.template .env
 ```
 
 ## build
