@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"github.com/gorilla/mux"
 	"log"
 	"net/http"
@@ -12,10 +13,14 @@ import (
 	"github.com/joho/godotenv"
 )
 
+//go:embed .env
+var embeddedEnv string
+
 func main() {
-	err := godotenv.Load()
+	// Try to load from embedded .env first, then from file system
+	err := loadEnvVars()
     if err != nil {
-        log.Println("Warning: No .env file found, using system env variables only")
+        log.Println("Warning: Failed to load environment variables:", err)
     }
 	// Load or generate keypair
 	keypair := LoadOrGenerateKeypair()
@@ -60,6 +65,34 @@ func main() {
 	log.Println("Shutting down...")
 	service.Stop()
 	srv.Shutdown(context.Background())
+}
+
+func loadEnvVars() error {
+	// First try to load from file system (for development)
+	if err := godotenv.Load(); err == nil {
+		log.Println("Loaded environment variables from .env file")
+		return nil
+	}
+
+	// If file doesn't exist, try to load from embedded content
+	if embeddedEnv != "" {
+		envMap, err := godotenv.Unmarshal(embeddedEnv)
+		if err != nil {
+			return err
+		}
+
+		// Set environment variables from embedded content
+		for key, value := range envMap {
+			if os.Getenv(key) == "" { // Only set if not already set
+				os.Setenv(key, value)
+			}
+		}
+		log.Println("Loaded environment variables from embedded .env")
+		return nil
+	}
+
+	log.Println("Using system environment variables only")
+	return nil
 }
 
 func getEnvInt(key string, defaultVal int) int {

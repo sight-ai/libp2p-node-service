@@ -16,3 +16,10 @@ go build
 ```
 go run .
 ```
+
+## package
+```
+// Windows
+GOOS=windows GOARCH=amd64 go build -o ./dist/sight-libp2p-node-amd64.exe
+
+```
