@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
@@ -127,12 +128,19 @@ func LoadOrGenerateKeypair() Keypair {
 	}
 }
 
-// getDataDir gets the directory where the configuration is stored
+// 和 local backend 逻辑一致：支持 Docker 和本地
 func getDataDir() string {
-	if dir := os.Getenv("SIGHTAI_DATA_DIR"); dir != "" {
-		return dir + "/config"
+	// 首先检查是否设置了 SIGHTAI_DATA_DIR（Docker 环境）
+	if dataDir := os.Getenv("SIGHTAI_DATA_DIR"); dataDir != "" {
+		return filepath.Join(dataDir, "config")
 	}
-	return os.Getenv("HOME") + "/.sightai/config"
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Printf("Warning: Could not get user home directory: %v", err)
+	}
+
+	return filepath.Join(homeDir, ".sightai", "config")
 }
 
 // CreateLibp2pNode creates a libp2p node and returns the host and pubsub service

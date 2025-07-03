@@ -25,6 +25,7 @@ var (
 	apiPort       = flag.String("api-port", "", "API port (overrides API_PORT)")
 	isGateway     = flag.String("is-gateway", "", "Is gateway (0 or 1, overrides IS_GATEWAY)")
 	bootstrapAddrs = flag.String("bootstrap-addrs", "", "Bootstrap addresses (comma-separated, overrides BOOTSTRAP_ADDRS)")
+	dataDir 	  = flag.String("data-addr", "", "Data directory for configuration files (overrides SIGHTAI_DATA_DIR env var)")
 	showHelp      = flag.Bool("help", false, "Show help message")
 )
 
@@ -101,6 +102,7 @@ func showUsage() {
 	fmt.Println("  --api-port <port>         API port (default: 8716)")
 	fmt.Println("  --is-gateway <0|1>        Is gateway mode (default: 0)")
 	fmt.Println("  --bootstrap-addrs <addrs> Bootstrap addresses (comma-separated)")
+	fmt.Println("  --data-addr <dir>  		 Data directory for config files (for Docker/custom paths)")
 	fmt.Println("  --help                    Show this help message")
 	fmt.Println("")
 	fmt.Println("Examples:")
@@ -112,6 +114,9 @@ func showUsage() {
 	fmt.Println("")
 	fmt.Println("  # Use benchmark environment")
 	fmt.Println("  ./sight-libp2p-node --node-port 25050 --libp2p-port 5010 --api-port 9716")
+	fmt.Println("")
+	fmt.Println("  # Use custom data directory (Docker environment)")
+	fmt.Println("  ./sight-libp2p-node --data-addr /app/data")
 }
 
 func overrideWithCLIFlags() {
@@ -134,6 +139,10 @@ func overrideWithCLIFlags() {
 	if *bootstrapAddrs != "" {
 		os.Setenv("BOOTSTRAP_ADDRS", *bootstrapAddrs)
 		log.Printf("CLI override: BOOTSTRAP_ADDRS = %s", *bootstrapAddrs)
+	}
+	if *dataDir != "" {
+		os.Setenv("SIGHTAI_DATA_DIR", *dataDir)
+		log.Printf("CLI override: SIGHTAI_DATA_DIR = %s", *dataDir)
 	}
 }
 
