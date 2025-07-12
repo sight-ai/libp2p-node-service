@@ -3,16 +3,18 @@ package main
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
-	"github.com/joho/godotenv"
+	"time"
 )
 
 //go:embed .env
@@ -68,6 +70,7 @@ func main() {
 	// Set up router
 	router := mux.NewRouter()
 	router.HandleFunc("/libp2p/send", controller.SendHandler).Methods("POST")
+	router.HandleFunc("/health", healthHandler).Methods("GET")
 
 	// Start the HTTP server
 	srv := &http.Server{
@@ -192,4 +195,18 @@ func getEnvInt(key string, defaultVal int) int {
 		return defaultVal
 	}
 	return intVal
+}
+
+// healthHandler handles the /health endpoint
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	response := map[string]interface{}{
+		"status": "healthy",
+		"message": "Sight Libp2p Node is running",
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
