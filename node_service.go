@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 
+	dht "github.com/libp2p/go-libp2p-kad-dht"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	hostlibp2p "github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type Libp2pNodeService struct {
@@ -22,6 +25,7 @@ type Libp2pNodeService struct {
 	topic      *pubsub.Topic
 	bootstrap  []string
 	nodePort   int
+	dht        *dht.IpfsDHT
 }
 
 func NewLibp2pNodeService(kp Keypair, port int, tunnelAPI string, isGateway bool, bootstrap []string) *Libp2pNodeService {
@@ -44,7 +48,7 @@ func (s *Libp2pNodeService) InitNode() {
 	ctx := context.Background()
 
 	// Create node and pubsub
-	h, ps := CreateLibp2pNode(ctx, s.nodePort, s.bootstrap)
+	h, ps, dht := CreateLibp2pNode(ctx, s.nodePort, s.bootstrap)
 	s.node = h
 
 	topic, err := ps.Join("sight-message")
@@ -58,6 +62,8 @@ func (s *Libp2pNodeService) InitNode() {
 		log.Fatalf("Failed to subscribe to topic: %v", err)
 	}
 	s.subscribed = sub
+
+	s.dht = dht
 
 	// Start message handler in a goroutine
 	go s.handleIncomingMessages(ctx)
@@ -124,4 +130,41 @@ func (s *Libp2pNodeService) Stop() {
 	if err := s.node.Close(); err != nil {
 		log.Printf("Error stopping node: %v", err)
 	}
+}
+
+// GetPublicKeyByPeerId returns the public key of a peer by its peer ID
+func (s *Libp2pNodeService) GetPublicKeyByPeerId(ctx context.Context, peerId string) ([]byte, error) {
+	pk, err := DecodePublicKeyFromPeerId(peerId)
+	if err == nil && pk != nil {
+		// println(`decode from peerId`)
+		return pk, nil
+	}
+
+	pid, err := peer.Decode(peerId)
+	if err != nil {
+		return nil, err
+	}
+	// 查找 peerstore
+	pub := s.node.Peerstore().PubKey(pid)
+	if pub != nil {
+		// println(`find from peerstore`)
+		return pub.Raw()
+	}
+	// 没有再DHT找对方地址
+	addrInfo, err := s.dht.FindPeer(ctx, pid)
+	if err != nil {
+		return nil, err
+	}
+	// 连接对端
+	err = s.node.Connect(ctx, addrInfo)
+	if err != nil {
+		return nil, err
+	}
+	// 连接后，再次查
+	pub = s.node.Peerstore().PubKey(pid)
+	if pub == nil {
+		// println(`find from DHT`)
+		return nil, errors.New("no public key found")
+	}
+	return pub.Raw()
 }

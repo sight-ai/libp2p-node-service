@@ -9,22 +9,26 @@ import (
 	"path/filepath"
 	"time"
 
+	"crypto/rand"
+
+	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-pubsub"
+	dht "github.com/libp2p/go-libp2p-kad-dht"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	hostlibp2p "github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/mr-tron/base58"
+	"github.com/multiformats/go-multihash"
 	"golang.org/x/crypto/ed25519"
-	"crypto/rand"
 )
 
 // Keypair struct to hold the keypair data
 type Keypair struct {
-	Seed      []byte `json:"seed"`
-	CreatedAt string `json:"createdAt"`
-	LastUsed  string `json:"lastUsed"`
-	PublicKey []byte `json:"publicKey,omitempty"`
+	Seed       []byte `json:"seed"`
+	CreatedAt  string `json:"createdAt"`
+	LastUsed   string `json:"lastUsed"`
+	PublicKey  []byte `json:"publicKey,omitempty"`
 	PrivateKey []byte `json:"privateKey,omitempty"`
 }
 
@@ -64,10 +68,10 @@ func LoadOrGenerateKeypair() Keypair {
 		pubKey := privKey.Public().(ed25519.PublicKey)
 
 		kp := Keypair{
-			Seed:      seed,
-			CreatedAt: tmp.CreatedAt,
-			LastUsed:  tmp.LastUsed,
-			PublicKey: pubKey,
+			Seed:       seed,
+			CreatedAt:  tmp.CreatedAt,
+			LastUsed:   tmp.LastUsed,
+			PublicKey:  pubKey,
 			PrivateKey: privKey,
 		}
 
@@ -94,10 +98,10 @@ func LoadOrGenerateKeypair() Keypair {
 		}
 
 		kp := Keypair{
-			Seed:      seed,
-			CreatedAt: now,
-			LastUsed:  now,
-			PublicKey: pubKey,
+			Seed:       seed,
+			CreatedAt:  now,
+			LastUsed:   now,
+			PublicKey:  pubKey,
 			PrivateKey: privKey,
 		}
 
@@ -144,7 +148,7 @@ func getDataDir() string {
 }
 
 // CreateLibp2pNode creates a libp2p node and returns the host and pubsub service
-func CreateLibp2pNode(ctx context.Context, port int, bootstrapList []string) (hostlibp2p.Host, *pubsub.PubSub) {
+func CreateLibp2pNode(ctx context.Context, port int, bootstrapList []string) (hostlibp2p.Host, *pubsub.PubSub, *dht.IpfsDHT) {
 	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 0)
 	if err != nil {
 		log.Fatal("Failed to generate keypair: ", err)
@@ -183,11 +187,76 @@ func CreateLibp2pNode(ctx context.Context, port int, bootstrapList []string) (ho
 			}
 		}
 	}
-	return h, pubsubService
+
+	// DHT
+	myDHT, err := dht.New(ctx, h, dht.Mode(dht.ModeServer))
+	if err != nil {
+		log.Fatal("Failed to create DHT: ", err)
+	}
+	go func() {
+		if err := myDHT.Bootstrap(ctx); err != nil {
+			log.Printf("[DHT] Bootstrap error: %v", err)
+		} else {
+			log.Printf("[DHT] Bootstrapped and ready")
+		}
+	}()
+
+	return h, pubsubService, myDHT
 }
 
 // ToSightDID generates a DID for the node from the public key
 func ToSightDID(publicKey []byte) string {
 	multicodec := append([]byte{0xed, 0x01}, publicKey...)
 	return "did:sight:hoster:" + base58.Encode(multicodec)
+}
+
+// peerId -> MultiAddr
+func FindPeerAddr(ctx context.Context, dhtNode *dht.IpfsDHT, peerIdStr string) ([]string, error) {
+	pid, err := peer.Decode(peerIdStr)
+	if err != nil {
+		return nil, err
+	}
+	info, err := dhtNode.FindPeer(ctx, pid)
+	if err != nil {
+		return nil, err
+	}
+	var addrs []string
+	for _, addr := range info.Addrs {
+		addrs = append(addrs, addr.String())
+	}
+	return addrs, nil
+}
+
+func DecodePublicKeyFromPeerId(peerId string) ([]byte, error) {
+	// 解码peerId
+	c, err := cid.Decode(peerId)
+	if err != nil {
+		// 不是cid格式，尝试base58解码
+		decoded, _ := base58.Decode(peerId)
+		if len(decoded) == 0 {
+			return nil, fmt.Errorf("invalid PeerId format")
+		}
+		// 解码 multihash
+		mh, err := multihash.Decode(decoded)
+		if err != nil {
+			return nil, fmt.Errorf("multihash decode failed: %v", err)
+		}
+		// 判断是否identity，有identity，可以反推出公钥
+		if mh.Code == multihash.IDENTITY {
+			return mh.Digest, nil
+		}
+		return nil, fmt.Errorf("peerid does not embed public key")
+	}
+
+	// 是cid格式，尝试identity反推公钥
+	mh := c.Hash()
+	decodedMh, err := multihash.Decode(mh)
+	if err != nil {
+		return nil, fmt.Errorf("multihash decode failed: %v", err)
+	}
+
+	if decodedMh.Code == multihash.IDENTITY {
+		return decodedMh.Digest, nil
+	}
+	return nil, fmt.Errorf("peerid does not embed public key (not identity multihash)")
 }
