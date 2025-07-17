@@ -11,6 +11,8 @@ import (
 
 	"crypto/rand"
 
+	"strings"
+
 	"github.com/ipfs/go-cid"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -148,10 +150,10 @@ func getDataDir() string {
 }
 
 // CreateLibp2pNode creates a libp2p node and returns the host and pubsub service
-func CreateLibp2pNode(ctx context.Context, port int, bootstrapList []string) (hostlibp2p.Host, *pubsub.PubSub, *dht.IpfsDHT) {
-	priv, _, err := crypto.GenerateKeyPair(crypto.Ed25519, 0)
+func CreateLibp2pNode(ctx context.Context, port int, bootstrapList []string, kp Keypair) (hostlibp2p.Host, *pubsub.PubSub, *dht.IpfsDHT) {
+	priv, err := crypto.UnmarshalEd25519PrivateKey(kp.PrivateKey)
 	if err != nil {
-		log.Fatal("Failed to generate keypair: ", err)
+		log.Fatal("Failed to unmarshal ed25519 private key: ", err)
 	}
 	h, err := libp2p.New(
 		libp2p.DefaultMuxers,
@@ -231,7 +233,7 @@ func DecodePublicKeyFromPeerId(peerId string) ([]byte, error) {
 	// 解码peerId
 	c, err := cid.Decode(peerId)
 	if err != nil {
-		// 不是cid格式，尝试base58解码
+		// 如果不是cid格式，尝试base58解码
 		decoded, _ := base58.Decode(peerId)
 		if len(decoded) == 0 {
 			return nil, fmt.Errorf("invalid PeerId format")
@@ -259,4 +261,28 @@ func DecodePublicKeyFromPeerId(peerId string) ([]byte, error) {
 		return decodedMh.Digest, nil
 	}
 	return nil, fmt.Errorf("peerid does not embed public key (not identity multihash)")
+}
+
+func DIDToPublicKey(did string) ([]byte, error) {
+	const prefix = "did:sight:hoster:"
+	if !strings.HasPrefix(did, prefix) {
+		return nil, fmt.Errorf("not a valid sight DID")
+	}
+	encoded := did[len(prefix):]
+	decoded, err := base58.Decode(encoded)
+	if err != nil {
+		return nil, err
+	}
+	if len(decoded) != 34 || decoded[0] != 0xed || decoded[1] != 0x01 {
+		return nil, fmt.Errorf("not a valid ed25519 encoded key")
+	}
+	return decoded[2:], nil
+}
+
+func PublicKeyToPeerId(pub []byte) (peer.ID, error) {
+	pk, err := crypto.UnmarshalEd25519PublicKey(pub)
+	if err != nil {
+		return "", err
+	}
+	return peer.IDFromPublicKey(pk)
 }

@@ -73,6 +73,10 @@ func main() {
 	router.HandleFunc("/libp2p/send", controller.SendHandler).Methods("POST")
 	router.HandleFunc("/libp2p/find-peer/{peerId}", controller.FindPeerHandler).Methods("GET")
 	router.HandleFunc("/libp2p/public-key/{peerId}", controller.GetPublicKeyHandler).Methods("GET")
+	router.HandleFunc("/libp2p/connect/{did}", controller.ConnectHandler).Methods("POST")
+	router.HandleFunc("/libp2p/neighbors", controller.GetNeighborsHandler).Methods("GET")
+	router.HandleFunc("/libp2p/ping/{did}", controller.PingHandler).Methods("POST")
+	router.HandleFunc("/libp2p/p2p-send/{did}", controller.SendDirectHandler).Methods("POST")
 	router.HandleFunc("/health", healthHandler).Methods("GET")
 
 	// Start the HTTP server

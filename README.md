@@ -65,15 +65,27 @@ NODE_PORT=15052 LIBP2P_REST_API=4012 API_PORT=8718 IS_GATEWAY=1 go run .
 
 ## Libp2p REST API
 ```
-// Send message
+# Send message via gossip (topic broadcast)
 curl -X POST -H "Content-Type: application/json" -d '{"to": "peerId", "payload": {"key": "value"}}' http://localhost:4010/libp2p/send
 
-// Find peer
+# Find peer (PeerId -> MultiAddr)
 curl http://localhost:{port}/libp2p/find-peer/{peerId}
 
-// Get public key
+# Get public key (PeerId -> PublicKey, base64)
 curl http://localhost:{port}/libp2p/public-key/{peerId}
 
-// Health check
+# Connect to a peer (by DID or MultiAddr)
+curl -X POST http://localhost:{port}/connect/{input}
+
+# Ping a peer (by DID, or MultiAddr)
+curl http://localhost:{port}/libp2p/ping/{input}
+
+# Send direct P2P message (by DID or MultiAddr)
+curl -X POST -H "Content-Type: application/json" -d '{"to": "peerId", "payload": {"key": "value"}}' http://localhost:{port}/libp2p/p2p-send/{input}
+
+# Get currently connected neighbors (PeerId list)
+curl http://localhost:{port}/neighbors
+
+# Health check
 curl http://localhost:{port}/health
 ```
