@@ -4,3 +4,5 @@ sight-libp2p-node
 
 /dist
 /dist/*
+
+.DS_Store

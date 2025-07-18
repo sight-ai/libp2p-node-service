@@ -3,15 +3,18 @@ package main
 import (
 	"context"
 	_ "embed"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/gorilla/mux"
 	"github.com/joho/godotenv"
 )
 
@@ -20,13 +23,13 @@ var embeddedEnv string
 
 // CLI flags
 var (
-	nodePort      = flag.String("node-port", "", "Node port (overrides NODE_PORT)")
-	libp2pPort    = flag.String("libp2p-port", "", "Libp2p REST API port (overrides LIBP2P_REST_API)")
-	apiPort       = flag.String("api-port", "", "API port (overrides API_PORT)")
-	isGateway     = flag.String("is-gateway", "", "Is gateway (0 or 1, overrides IS_GATEWAY)")
+	nodePort       = flag.String("node-port", "", "Node port (overrides NODE_PORT)")
+	libp2pPort     = flag.String("libp2p-port", "", "Libp2p REST API port (overrides LIBP2P_REST_API)")
+	apiPort        = flag.String("api-port", "", "API port (overrides API_PORT)")
+	isGateway      = flag.String("is-gateway", "", "Is gateway (0 or 1, overrides IS_GATEWAY)")
 	bootstrapAddrs = flag.String("bootstrap-addrs", "", "Bootstrap addresses (comma-separated, overrides BOOTSTRAP_ADDRS)")
-	dataDir 	  = flag.String("data-addr", "", "Data directory for configuration files (overrides SIGHTAI_DATA_DIR env var)")
-	showHelp      = flag.Bool("help", false, "Show help message")
+	dataDir        = flag.String("data-addr", "", "Data directory for configuration files (overrides SIGHTAI_DATA_DIR env var)")
+	showHelp       = flag.Bool("help", false, "Show help message")
 )
 
 func main() {
@@ -41,12 +44,12 @@ func main() {
 
 	// Load environment variables (embedded .env or file system)
 	err := loadEnvVars()
-    if err != nil {
-        log.Println("Warning: Failed to load environment variables:", err)
-    }
+	if err != nil {
+		log.Println("Warning: Failed to load environment variables:", err)
+	}
 
-    // Override with CLI flags if provided
-    overrideWithCLIFlags()
+	// Override with CLI flags if provided
+	overrideWithCLIFlags()
 	// Load or generate keypair
 	keypair := LoadOrGenerateKeypair()
 
@@ -68,6 +71,13 @@ func main() {
 	// Set up router
 	router := mux.NewRouter()
 	router.HandleFunc("/libp2p/send", controller.SendHandler).Methods("POST")
+	router.HandleFunc("/libp2p/find-peer/{peerId}", controller.FindPeerHandler).Methods("GET")
+	router.HandleFunc("/libp2p/public-key/{peerId}", controller.GetPublicKeyHandler).Methods("GET")
+	router.HandleFunc("/libp2p/connect/{did}", controller.ConnectHandler).Methods("POST")
+	router.HandleFunc("/libp2p/neighbors", controller.GetNeighborsHandler).Methods("GET")
+	router.HandleFunc("/libp2p/ping/{did}", controller.PingHandler).Methods("POST")
+	router.HandleFunc("/libp2p/p2p-send/{did}", controller.SendDirectHandler).Methods("POST")
+	router.HandleFunc("/health", healthHandler).Methods("GET")
 
 	// Start the HTTP server
 	srv := &http.Server{
@@ -192,4 +202,18 @@ func getEnvInt(key string, defaultVal int) int {
 		return defaultVal
 	}
 	return intVal
+}
+
+// healthHandler handles the /health endpoint
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	response := map[string]interface{}{
+		"status":    "healthy",
+		"message":   "Sight Libp2p Node is running",
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+
+	json.NewEncoder(w).Encode(response)
 }
